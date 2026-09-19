@@ -1,0 +1,42 @@
+{% extends 'attendance/base.html' %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<h2 class="mb-4">Attendance Reports</h2>
+
+<form method="get" class="row g-2 mb-4">
+    <div class="col-md-3"><input type="date" class="form-control" name="start" value="{{ start }}"></div>
+    <div class="col-md-3"><input type="date" class="form-control" name="end" value="{{ end }}"></div>
+    <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Filter</button></div>
+    <div class="col-md-2"><a class="btn btn-outline-success w-100" href="{% url 'attendance:export_csv' %}?start={{ start }}&end={{ end }}">Export CSV</a></div>
+    <div class="col-md-2"><a class="btn btn-outline-danger w-100" href="{% url 'attendance:export_pdf' %}?start={{ start }}&end={{ end }}">Export PDF</a></div>
+</form>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5>Attendance summary per student ({{ start }} to {{ end }})</h5>
+        <table class="table table-sm">
+            <thead><tr><th>Student ID</th><th>Name</th><th>Days Present</th></tr></thead>
+            <tbody>
+            {% for row in per_student %}
+                <tr><td>{{ row.student__student_id }}</td><td>{{ row.student__name }}</td><td>{{ row.days_present }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5>All records</h5>
+        <table class="table table-sm">
+            <thead><tr><th>Student</th><th>Date</th><th>Time</th><th>Confidence</th><th>Method</th></tr></thead>
+            <tbody>
+            {% for r in records %}
+                <tr><td>{{ r.student.name }}</td><td>{{ r.date }}</td><td>{{ r.time_in }}</td>
+                    <td>{{ r.confidence|floatformat:2 }}</td><td>{{ r.method }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

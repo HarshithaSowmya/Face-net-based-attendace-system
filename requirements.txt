@@ -1,0 +1,10 @@
+Django==4.2.13
+opencv-python==4.9.0.80
+mtcnn==0.1.1
+tensorflow==2.15.0
+keras-facenet==0.3.2
+scikit-learn==1.4.2
+numpy==1.26.4
+pandas==2.2.2
+Pillow==10.3.0
+reportlab==4.2.0

@@ -1,0 +1,68 @@
+{% extends 'attendance/base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h2 class="mb-4">Attendance Dashboard</h2>
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary"><div class="card-body">
+            <h6>Enrolled Students</h6><h2>{{ total_students }}</h2>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success"><div class="card-body">
+            <h6>Present Today</h6><h2>{{ present_today }}</h2>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-danger"><div class="card-body">
+            <h6>Absent Today</h6><h2>{{ absent_today }}</h2>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info"><div class="card-body">
+            <h6>Today's Attendance Rate</h6><h2>{{ attendance_rate }}%</h2>
+        </div></div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5>Last 7 Days</h5>
+        <canvas id="trendChart" height="90"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5>Recent Check-ins</h5>
+        <table class="table table-sm">
+            <thead><tr><th>Student</th><th>Date</th><th>Time</th><th>Confidence</th></tr></thead>
+            <tbody>
+            {% for r in recent %}
+                <tr><td>{{ r.student.name }}</td><td>{{ r.date }}</td><td>{{ r.time_in }}</td>
+                    <td>{{ r.confidence|floatformat:2 }}</td></tr>
+            {% empty %}
+                <tr><td colspan="4" class="text-muted">No attendance recorded yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+    const ctx = document.getElementById('trendChart');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: [{% for t in trend %}"{{ t.date }}",{% endfor %}],
+            datasets: [{
+                label: 'Students Present',
+                data: [{% for t in trend %}{{ t.count }},{% endfor %}],
+                backgroundColor: '#0d6efd'
+            }]
+        },
+        options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+</script>
+{% endblock %}

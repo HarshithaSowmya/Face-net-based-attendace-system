@@ -1,0 +1,49 @@
+{% extends 'attendance/base.html' %}
+{% block title %}Register Student{% endblock %}
+{% block content %}
+<h2 class="mb-4">Register & Enroll Students</h2>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5>1. Add a new student</h5>
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-2">
+                <div class="col-md-3"><input class="form-control" name="student_id" placeholder="Student ID (e.g. STU001)" required></div>
+                <div class="col-md-3"><input class="form-control" name="name" placeholder="Full Name" required></div>
+                <div class="col-md-3"><input class="form-control" name="department" placeholder="Department"></div>
+                <div class="col-md-3"><input class="form-control" name="email" placeholder="Email"></div>
+            </div>
+            <button class="btn btn-primary mt-3" type="submit">Add Student</button>
+        </form>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5>2. Capture face samples</h5>
+        <p class="text-muted">Opens a webcam window on the server machine and captures ~60 face crops for the selected student. Run this once per student.</p>
+        <table class="table">
+            <thead><tr><th>ID</th><th>Name</th><th>Enrolled (model trained)?</th><th></th></tr></thead>
+            <tbody>
+            {% for s in students %}
+                <tr>
+                    <td>{{ s.student_id }}</td>
+                    <td>{{ s.name }}</td>
+                    <td>{% if s.is_enrolled %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-warning">Pending</span>{% endif %}</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="{% url 'attendance:run_capture' s.student_id %}">Capture Faces</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5>3. (Re)train the recognition model</h5>
+        <p class="text-muted">Run this after capturing samples for one or more students. It extracts FaceNet embeddings for every captured image and fits the KNN classifier used during live recognition.</p>
+        <a class="btn btn-success" href="{% url 'attendance:run_training' %}">Train Model</a>
+    </div>
+</div>
+{% endblock %}

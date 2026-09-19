@@ -1,0 +1,11 @@
+{% extends 'attendance/base.html' %}
+{% block title %}Mark Attendance{% endblock %}
+{% block content %}
+<h2 class="mb-4">Contactless Attendance</h2>
+<p class="text-muted">Stand in front of the camera. Recognized students are marked present automatically (once per day).</p>
+<div class="card">
+    <div class="card-body text-center">
+        <img src="{% url 'attendance:video_feed' %}" class="img-fluid rounded" style="max-width: 720px;">
+    </div>
+</div>
+{% endblock %}
