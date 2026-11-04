@@ -1,85 +1,59 @@
-"""
-capture_faces.py
-================
-Step 1 of the pipeline: ENROLLMENT.
-
-Opens the webcam, runs MTCNN face detection on every frame, and saves
-cropped 160x160 face images to  media/dataset/<student_id>/  until
-SAMPLES_PER_STUDENT images have been captured. These raw crops are later
-turned into embeddings + a trained KNN model by train_model.py.
-
-Usage (standalone CLI):
-    python face_engine/capture_faces.py --id STU001 --name "Asha Rao"
-
-This is also invoked from the Django "Register Student" view via subprocess,
-so it can be triggered from the web UI.
-"""
+"""Capture single-person enrollment samples using the server's webcam."""
 import argparse
-import sys
+import re
 import time
-from pathlib import Path
-
-# Make sure the project root (which contains the face_engine/ package) is on
-# sys.path, so this file works whether it's run as `python face_engine/capture_faces.py`
-# (script mode, where Python only puts face_engine/ itself on sys.path) or as
-# `python -m face_engine.capture_faces` (module mode). Without this, script
-# mode raises: ModuleNotFoundError: No module named 'face_engine'
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
+import uuid
 import cv2
-
 from face_engine import config
 from face_engine.face_utils import detect_faces, crop_and_align
 
 
-def capture_for_student(student_id: str, num_samples: int = config.SAMPLES_PER_STUDENT):
-    save_dir = config.DATASET_DIR / student_id
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        raise RuntimeError("Could not open webcam (device 0).")
-
-    count = 0
-    print(f"[capture] Starting capture for '{student_id}'. Press 'q' to abort early.")
-    last_save = 0
-    while count < num_samples:
-        ok, frame = cap.read()
-        if not ok:
-            continue
-
-        faces = detect_faces(frame)
-        for f in faces:
-            x, y, w, h = f['box']
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-            # throttle saving slightly so we capture varied poses, not
-            # 60 near-identical frames in half a second
-            if faces and (time.time() - last_save) > 0.15:
-                crop = crop_and_align(frame, f['box'])
-                if crop is not None:
-                    out_path = save_dir / f"{student_id}_{count:03d}.jpg"
-                    cv2.imwrite(str(out_path), crop)
-                    count += 1
-                    last_save = time.time()
-            break  # only use the largest/first detected face per frame
-
-        cv2.putText(frame, f"Captured: {count}/{num_samples}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-        cv2.imshow('Enrollment - press q to stop', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-    print(f"[capture] Done. Saved {count} images to {save_dir}")
+def capture_for_student(student_id, num_samples=config.SAMPLES_PER_STUDENT):
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,29}', student_id):
+        raise ValueError('Student ID must contain only letters, numbers, hyphens and underscores.')
+    if not 1 <= num_samples <= 500:
+        raise ValueError('Samples must be between 1 and 500.')
+    directory = config.DATASET_DIR / student_id
+    directory.mkdir(parents=True, exist_ok=True)
+    cap = cv2.VideoCapture(config.CAMERA_INDEX)
+    count, last_save = 0, 0
+    session = uuid.uuid4().hex[:12]
+    deadline = time.monotonic() + 150
+    try:
+        if not cap.isOpened():
+            raise RuntimeError('Could not open webcam. Check camera permissions and CAMERA_INDEX.')
+        while count < num_samples and time.monotonic() < deadline:
+            ok, frame = cap.read()
+            if not ok:
+                raise RuntimeError('Camera stopped delivering frames.')
+            faces = detect_faces(frame)
+            # Multiple people can contaminate the identity's enrollment data.
+            if len(faces) == 1:
+                box = faces[0]['box']
+                crop = crop_and_align(frame, box)
+                if crop is not None and time.monotonic() - last_save > 0.25:
+                    if cv2.imwrite(str(directory / f'{session}_{count:03d}.jpg'), crop):
+                        count += 1
+                        last_save = time.monotonic()
+                x, y, w, h = box
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 200, 0), 2)
+            hint = f'Captured {count}/{num_samples}' if len(faces) == 1 else 'Keep exactly one face in view'
+            cv2.putText(frame, hint, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 0), 2)
+            cv2.imshow('Enrollment - vary pose slowly; q to cancel', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+    print(f'[capture] Saved {count} samples to {directory}')
+    if count < num_samples:
+        raise RuntimeError(f'Capture incomplete: saved {count}/{num_samples}. Retry to add more samples.')
     return count
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Capture face samples for a student.")
-    parser.add_argument('--id', required=True, help="Unique student ID (folder name)")
-    parser.add_argument('--name', required=False, help="Student full name (for logging only)")
+    parser = argparse.ArgumentParser(description='Capture face samples for one consenting student.')
+    parser.add_argument('--id', required=True)
     parser.add_argument('--samples', type=int, default=config.SAMPLES_PER_STUDENT)
     args = parser.parse_args()
     capture_for_student(args.id, args.samples)

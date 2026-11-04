@@ -16,8 +16,6 @@ in real-time face recognition apps.
 """
 import cv2
 import numpy as np
-from mtcnn import MTCNN
-from keras_facenet import FaceNet
 
 from face_engine import config
 
@@ -33,12 +31,14 @@ class FaceNetEngine:
     @classmethod
     def detector(cls):
         if cls._detector is None:
+            from mtcnn import MTCNN
             cls._detector = MTCNN()
         return cls._detector
 
     @classmethod
     def embedder(cls):
         if cls._embedder is None:
+            from keras_facenet import FaceNet
             # keras-facenet downloads/loads the pretrained FaceNet weights
             # the first time this runs and caches them locally afterwards.
             cls._embedder = FaceNet()
@@ -60,9 +60,10 @@ def detect_faces(frame_bgr):
         if det['confidence'] < config.DETECTION_CONFIDENCE_THRESHOLD:
             continue
         x, y, w, h = det['box']
+        right, bottom = min(x + w, w_frame), min(y + h, h_frame)
         x, y = max(0, x), max(0, y)
-        w, h = min(w, w_frame - x), min(h, h_frame - y)
-        faces.append({'box': (x, y, w, h), 'confidence': det['confidence']})
+        if right > x and bottom > y:
+            faces.append({'box': (x, y, right - x, bottom - y), 'confidence': det['confidence']})
     return faces
 
 
@@ -87,11 +88,19 @@ def get_embedding(face_bgr):
     rgb = cv2.cvtColor(face_bgr, cv2.COLOR_BGR2RGB)
     # keras_facenet expects a *batch* of images: shape (n, 160, 160, 3)
     embeddings = FaceNetEngine.embedder().embeddings([rgb])
-    return embeddings[0]  # -> np.ndarray shape (512,) for this package's model
+    return normalize_embeddings(embeddings)[0]
 
 
 def get_embeddings_batch(face_list_bgr):
     """Vectorised version of get_embedding for training (much faster than
     calling get_embedding() in a Python loop over hundreds of images)."""
     rgb_list = [cv2.cvtColor(f, cv2.COLOR_BGR2RGB) for f in face_list_bgr]
-    return FaceNetEngine.embedder().embeddings(rgb_list)
+    return normalize_embeddings(FaceNetEngine.embedder().embeddings(rgb_list))
+
+
+def normalize_embeddings(embeddings):
+    values = np.asarray(embeddings, dtype=np.float32)
+    norms = np.linalg.norm(values, axis=1, keepdims=True)
+    if not np.isfinite(values).all() or np.any(norms == 0):
+        raise ValueError('FaceNet returned invalid embeddings.')
+    return values / norms

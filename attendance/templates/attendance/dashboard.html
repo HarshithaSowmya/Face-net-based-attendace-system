@@ -1,68 +1,24 @@
 {% extends 'attendance/base.html' %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}Overview{% endblock %}
+{% block breadcrumb %}OVERVIEW{% endblock %}
 {% block content %}
-<h2 class="mb-4">Attendance Dashboard</h2>
+<div class="page-heading"><div><div class="eyebrow">EVERY CHECK-IN COUNTS</div><h1>Attendance overview</h1><p class="mb-0">A clear picture of your classroom, in real time.</p></div><a class="btn btn-primary" href="{% url 'attendance:mark_attendance' %}">◎ &nbsp; Open live attendance</a></div>
 <div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="card text-white bg-primary"><div class="card-body">
-            <h6>Enrolled Students</h6><h2>{{ total_students }}</h2>
-        </div></div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-success"><div class="card-body">
-            <h6>Present Today</h6><h2>{{ present_today }}</h2>
-        </div></div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-danger"><div class="card-body">
-            <h6>Absent Today</h6><h2>{{ absent_today }}</h2>
-        </div></div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-info"><div class="card-body">
-            <h6>Today's Attendance Rate</h6><h2>{{ attendance_rate }}%</h2>
-        </div></div>
-    </div>
+    <div class="col-6 col-xl-3"><div class="metric primary"><small>Enrolled students</small><h2>{{ total_students }}</h2><p>{{ pending_students }} awaiting enrollment</p></div></div>
+    <div class="col-6 col-xl-3"><div class="metric"><small>Present today</small><h2>{{ present_today }}</h2><p><span class="status-dot"></span>Verified check-ins</p></div></div>
+    <div class="col-6 col-xl-3"><div class="metric"><small>Absent today</small><h2>{{ absent_today }}</h2><p>Enrolled students yet to check in</p></div></div>
+    <div class="col-6 col-xl-3"><div class="metric"><small>Attendance rate</small><h2>{{ attendance_rate }}<span style="font-size:20px">%</span></h2><p>Of currently enrolled students</p></div></div>
 </div>
-
-<div class="card mb-4">
-    <div class="card-body">
-        <h5>Last 7 Days</h5>
-        <canvas id="trendChart" height="90"></canvas>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-body">
-        <h5>Recent Check-ins</h5>
-        <table class="table table-sm">
-            <thead><tr><th>Student</th><th>Date</th><th>Time</th><th>Confidence</th></tr></thead>
-            <tbody>
-            {% for r in recent %}
-                <tr><td>{{ r.student.name }}</td><td>{{ r.date }}</td><td>{{ r.time_in }}</td>
-                    <td>{{ r.confidence|floatformat:2 }}</td></tr>
-            {% empty %}
-                <tr><td colspan="4" class="text-muted">No attendance recorded yet.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script>
-    const ctx = document.getElementById('trendChart');
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: [{% for t in trend %}"{{ t.date }}",{% endfor %}],
-            datasets: [{
-                label: 'Students Present',
-                data: [{% for t in trend %}{{ t.count }},{% endfor %}],
-                backgroundColor: '#0d6efd'
-            }]
-        },
-        options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
-    });
-</script>
+{% if model_report %}
+<div class="model-strip"><span><strong>Recognition model ready</strong> · {{ model_report.sample_count }} samples / {{ model_report.student_count }} students</span><span>Last trained: {{ model_report.trained_at }} · <a href="{% url 'attendance:register' %}">Manage model ↗</a></span></div>
+{% else %}
+<div class="model-strip"><span><strong>Let's get your classroom ready.</strong> Register at least two students, capture their samples, then train the model.</span><a href="{% url 'attendance:register' %}">Start enrollment →</a></div>
+{% endif %}
+<div class="card mb-4"><div class="card-body"><div class="d-flex justify-content-between"><h5>Attendance activity</h5><span class="text-muted small">Last 7 days · daily check-ins</span></div>
+<div class="chart-bars" role="img" aria-label="Daily attendance counts over the last seven days">
+{% for day in trend %}<div class="chart-day"><strong>{{ day.count }}</strong><div class="chart-bar" style="height:{% widthratio day.count trend_max 120 %}px"></div><span>{{ day.date }}</span></div>{% endfor %}
+</div></div></div>
+<div class="card"><div class="card-body"><div class="d-flex justify-content-between align-items-center"><h5 class="mb-0">Recent check-ins</h5><a class="small" href="{% url 'attendance:reports' %}">View all reports ↗</a></div><div class="table-responsive"><table class="table"><thead><tr><th>Student</th><th>Date</th><th>Check-in</th><th>KNN score</th><th>Status</th></tr></thead><tbody>
+{% for r in recent %}<tr><td><strong>{{ r.student.name }}</strong><br><small class="text-muted">{{ r.student.student_id }}</small></td><td>{{ r.date|date:'d M Y' }}</td><td>{{ r.time_in|time:'H:i:s' }}</td><td>{{ r.confidence|floatformat:2 }}</td><td><span class="badge bg-success">Present</span></td></tr>{% empty %}<tr><td class="empty-state" colspan="5">No check-ins yet. Start a live attendance session after enrollment.</td></tr>{% endfor %}
+</tbody></table></div></div></div>
 {% endblock %}

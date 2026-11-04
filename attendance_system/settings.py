@@ -4,13 +4,21 @@ FaceNet + OpenCV + TensorFlow are used inside the `face_engine` package;
 this file only wires up Django itself (SQLite DB, apps, templates, static/media).
 """
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- Security -----------------------------------------------------------
-SECRET_KEY = 'change-this-secret-key-in-production'
-DEBUG = True
-ALLOWED_HOSTS = ['*']
+DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'local-development-only-change-before-deployment')
+if not DEBUG and SECRET_KEY == 'local-development-only-change-before-deployment':
+    raise RuntimeError('Set DJANGO_SECRET_KEY before disabling debug mode.')
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,[::1]').split(',')
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = LOGIN_URL
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
 
 # --- Apps -----------------------------------------------------------------
 INSTALLED_APPS = [
@@ -74,17 +82,5 @@ USE_TZ = True
 STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
-
-# --- Face-engine specific settings ----------------------------------------
-# Where captured face crops are stored per-student before training:
-DATASET_DIR = MEDIA_ROOT / 'dataset'
-# Where the trained KNN model + label encoder are stored after training:
-MODEL_DIR = BASE_DIR / 'face_engine' / 'trained_model'
-KNN_MODEL_PATH = MODEL_DIR / 'knn_classifier.pkl'
-LABEL_ENCODER_PATH = MODEL_DIR / 'label_encoder.pkl'
-# Minimum softmax-style confidence (KNN neighbor vote ratio) to accept a match
-RECOGNITION_CONFIDENCE_THRESHOLD = 0.75
-# How many face samples to capture per student during enrollment
-SAMPLES_PER_STUDENT = 60
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

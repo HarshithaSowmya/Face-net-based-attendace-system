@@ -1,108 +1,87 @@
-"""
-train_model.py
-===============
-Step 2 of the pipeline: TRAINING.
-
-Reads every captured face image under media/dataset/<student_id>/*.jpg,
-converts each one into a 512-D FaceNet embedding, and fits a K-Nearest
-Neighbors classifier (scikit-learn) on (embeddings -> student_id labels).
-
-Why KNN on top of FaceNet embeddings (this matches the resume bullet
-"KNN-based identity verification"):
-  - FaceNet's job is only to produce embeddings where the same person's
-    faces cluster tightly together and different people's faces are far
-    apart (trained with triplet loss).
-  - KNN is then a cheap, interpretable classifier on top of that embedding
-    space: "whose embeddings, among all enrolled students, are closest to
-    this new face?" It requires no retraining of the deep network itself
-    when a new student enrolls -- you only refit the lightweight KNN.
-
-Usage:
-    python face_engine/train_model.py
-"""
+"""Train a KNN recognizer over normalized FaceNet embeddings."""
+import json
+import math
+import os
 import pickle
-import sys
-from collections import defaultdict
-from pathlib import Path
-
-# See the comment in capture_faces.py: this keeps the script runnable both
-# as `python face_engine/train_model.py` and as a normal import.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import uuid
+from collections import Counter
+from datetime import datetime, timezone
 
 import cv2
 import numpy as np
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
 
 from face_engine import config
 from face_engine.face_utils import get_embeddings_batch
 
 
-def load_dataset():
-    """Walk media/dataset/<student_id>/*.jpg and return (images, labels)."""
+def load_dataset(student_ids=None):
     images, labels = [], []
-    for student_dir in sorted(config.DATASET_DIR.iterdir()):
-        if not student_dir.is_dir():
+    if not config.DATASET_DIR.exists():
+        return images, labels
+    for directory in sorted(config.DATASET_DIR.iterdir()):
+        if not directory.is_dir() or (student_ids is not None and directory.name not in student_ids):
             continue
-        student_id = student_dir.name
-        for img_path in student_dir.glob('*.jpg'):
-            img = cv2.imread(str(img_path))
-            if img is not None:
-                images.append(img)
-                labels.append(student_id)
+        for path in sorted(directory.glob('*.jpg')):
+            image = cv2.imread(str(path))
+            if image is not None:
+                images.append(cv2.resize(image, config.FACE_SIZE))
+                labels.append(directory.name)
     return images, labels
 
 
-def train():
-    print("[train] Loading dataset...")
-    images, labels = load_dataset()
-    if len(set(labels)) < 2:
-        raise RuntimeError(
-            "Need at least 2 enrolled students with captured samples before training. "
-            "Run capture_faces.py for each student first."
-        )
+def training_report():
+    try:
+        return json.loads(config.TRAINING_REPORT_PATH.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
 
-    counts = defaultdict(int)
-    for l in labels:
-        counts[l] += 1
-    print(f"[train] {len(images)} total images across {len(counts)} students: {dict(counts)}")
 
-    print("[train] Computing FaceNet embeddings (this loads TensorFlow, may take a moment)...")
-    embeddings = get_embeddings_batch(images)
-    embeddings = np.asarray(embeddings)
-
+def train(student_ids=None):
+    images, labels = load_dataset(student_ids)
+    counts = Counter(labels)
+    if len(counts) < 2:
+        raise RuntimeError('Capture samples for at least two registered students before training.')
+    if min(counts.values()) < config.MIN_SAMPLES_PER_STUDENT:
+        raise RuntimeError(f'Each student needs at least {config.MIN_SAMPLES_PER_STUDENT} readable JPG samples. Counts: {dict(counts)}')
+    print(f'[train] Computing embeddings for {len(images)} images across {len(counts)} students.')
+    embeddings = np.concatenate([
+        get_embeddings_batch(images[start:start + config.EMBEDDING_BATCH_SIZE])
+        for start in range(0, len(images), config.EMBEDDING_BATCH_SIZE)
+    ])
     encoder = LabelEncoder()
     y = encoder.fit_transform(labels)
-
+    validation_size = max(len(counts), math.ceil(len(y) * 0.2))
     X_train, X_test, y_train, y_test = train_test_split(
-        embeddings, y, test_size=0.2, random_state=42, stratify=y
+        embeddings, y, test_size=validation_size, random_state=42, stratify=y,
     )
-
-    # n_neighbors=5 is a reasonable default; lower it if any student has
-    # fewer than 5 samples.
-    n_neighbors = min(5, min(counts.values()))
-    knn = KNeighborsClassifier(n_neighbors=n_neighbors, metric='euclidean', weights='distance')
+    k = min(5, min(Counter(y_train).values()))
+    knn = KNeighborsClassifier(n_neighbors=k, metric='euclidean', weights='distance')
     knn.fit(X_train, y_train)
-
-    val_preds = knn.predict(X_test)
-    acc = accuracy_score(y_test, val_preds)
-    print(f"[train] Validation accuracy: {acc * 100:.2f}%  (n_neighbors={n_neighbors})")
-
-    # Refit on the FULL dataset for the deployed model (common practice once
-    # you've validated the approach on the held-out split above).
+    accuracy = float(accuracy_score(y_test, knn.predict(X_test)))
     knn.fit(embeddings, y)
-
+    report = {
+        'trained_at': datetime.now(timezone.utc).isoformat(),
+        'sample_count': len(images), 'student_count': len(counts),
+        'samples_per_student': dict(counts), 'student_ids': list(encoder.classes_),
+        'validation_accuracy': accuracy, 'validation_samples': len(y_test),
+        'neighbors': k, 'max_embedding_distance': config.MAX_EMBEDDING_DISTANCE,
+        'validation_note': 'Random image split; adjacent capture frames can inflate accuracy. Validate on separate sessions and unknown subjects.',
+    }
     config.MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    with open(config.KNN_MODEL_PATH, 'wb') as f:
-        pickle.dump(knn, f)
-    with open(config.LABEL_ENCODER_PATH, 'wb') as f:
-        pickle.dump(encoder, f)
-
-    print(f"[train] Saved KNN model -> {config.KNN_MODEL_PATH}")
-    print(f"[train] Saved label encoder -> {config.LABEL_ENCODER_PATH}")
-    return acc
+    # A single atomic bundle prevents readers seeing a new model with an old encoder.
+    temporary = config.MODEL_BUNDLE_PATH.with_suffix(f'.{uuid.uuid4().hex}.tmp')
+    with open(temporary, 'wb') as handle:
+        pickle.dump({'knn': knn, 'encoder': encoder, 'report': report}, handle)
+    os.replace(temporary, config.MODEL_BUNDLE_PATH)
+    temporary_report = config.TRAINING_REPORT_PATH.with_suffix(f'.{uuid.uuid4().hex}.tmp')
+    temporary_report.write_text(json.dumps(report, indent=2), encoding='utf-8')
+    os.replace(temporary_report, config.TRAINING_REPORT_PATH)
+    print(f'[train] Validation accuracy: {accuracy:.2%}; saved {config.MODEL_BUNDLE_PATH}')
+    return accuracy
 
 
 if __name__ == '__main__':

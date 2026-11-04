@@ -4,3 +4,8 @@ __pycache__/
 db.sqlite3
 media/dataset/
 face_engine/trained_model/
+.runtime/
+preview-dashboard.html
+.env
+.env.*
+*.sqlite3-journal
