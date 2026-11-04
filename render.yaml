@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: facenet-attendance
+    runtime: python
+    plan: 1c-2g
+    numInstances: 1
+    autoDeployTrigger: off
+    buildCommand: bash build.sh
+    startCommand: bash start.sh
+    healthCheckPath: /health/
+    disk:
+      name: attendance-data
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "0"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DATA_DIR
+        value: /var/data
+      - key: FACENET_CACHE_DIR
+        value: /var/data/facenet-cache
+      - key: TF_NUM_INTRAOP_THREADS
+        value: "1"
+      - key: TF_NUM_INTEROP_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: DJANGO_SUPERUSER_USERNAME
+        sync: false
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false

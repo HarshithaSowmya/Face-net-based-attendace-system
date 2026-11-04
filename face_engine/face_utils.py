@@ -41,7 +41,7 @@ class FaceNetEngine:
             from keras_facenet import FaceNet
             # keras-facenet downloads/loads the pretrained FaceNet weights
             # the first time this runs and caches them locally afterwards.
-            cls._embedder = FaceNet()
+            cls._embedder = FaceNet(cache_folder=str(config.FACENET_CACHE_DIR))
         return cls._embedder
 
 

@@ -1,0 +1,22 @@
+{% extends 'attendance/base.html' %}
+{% load static %}
+{% block title %}{% if student %}Capture samples{% else %}Live attendance{% endif %}{% endblock %}
+{% block breadcrumb %}BROWSER CAMERA{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">CONTACTLESS CLASSROOM</div>
+{% if student %}<h1>Enroll {{ student.name }}</h1><p class="mb-0">Capture {{ target_samples }} samples for {{ student.student_id }}. Keep one person in view and slowly vary pose.</p>{% else %}<h1>Live attendance</h1><p class="mb-0">Use this device's webcam to check in enrolled students.</p>{% endif %}</div></div>
+<div class="card mb-4"><div class="card-body">
+{% if student or model_ready %}
+<div id="browser-camera" data-endpoint="{% if student %}{% url 'attendance:capture_frame' student.student_id %}{% else %}{% url 'attendance:recognize_frame' %}{% endif %}" data-mode="{% if student %}capture{% else %}recognize{% endif %}" data-target="{{ target_samples|default:0 }}">
+<form hidden>{% csrf_token %}</form>
+<p class="text-muted">Starting the camera sends snapshots to this attendance server for {% if student %}saving enrollment face crops{% else %}recognition; check-in snapshots are not saved{% endif %}. Only start with the participant's consent.</p>
+<div class="camera-stage"><div class="camera-preview"><video id="camera-video" autoplay playsinline muted aria-label="Your camera preview" hidden></video><canvas id="camera-overlay" aria-hidden="true"></canvas><p id="camera-placeholder">Your camera is off. Click Start camera and allow camera access.</p></div></div>
+<div class="d-flex gap-2 mt-3"><button id="camera-start" class="btn btn-primary" type="button">Start camera</button><button id="camera-stop" class="btn btn-outline-primary" type="button" disabled>Stop camera</button></div>
+<p id="camera-status" class="mt-3 mb-0" role="status" aria-live="polite">{% if student %}0 / {{ target_samples }} samples saved this session.{% else %}Ready to start. Recognized students are marked once per day.{% endif %}</p>
+</div>
+{% else %}<p>Capture samples for at least two students and train the model before starting attendance.</p><a class="btn btn-primary" href="{% url 'attendance:register' %}">Open enrollment →</a>{% endif %}
+<p class="small text-muted mt-3 mb-0">Camera access requires HTTPS or localhost. Keep this tab visible while capturing. This system has no liveness detection.</p>
+</div></div>
+{% if student %}<a class="btn btn-primary" href="{% url 'attendance:register' %}">Back to enrollment & train model →</a>{% else %}<a href="{% url 'attendance:reports' %}">Review attendance reports →</a>{% endif %}
+<script src="{% static 'attendance/camera.js' %}" defer></script>
+{% endblock %}

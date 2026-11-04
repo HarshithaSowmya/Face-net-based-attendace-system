@@ -9,3 +9,4 @@ preview-dashboard.html
 .env
 .env.*
 *.sqlite3-journal
+staticfiles/

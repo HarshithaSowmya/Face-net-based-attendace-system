@@ -61,3 +61,7 @@ footer {
     .login-page .main-content { padding: 28px 18px; align-items: center; }
     .login-page .login-card .card-body { padding: 26px; }
 }
+.camera-preview { position: relative; width: 100%; max-width: 800px; }
+.camera-preview video { display: block; width: 100%; border-radius: 8px; }
+.camera-preview video[hidden] { display: none; }
+.camera-preview canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

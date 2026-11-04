@@ -1,0 +1,8 @@
+Django>=5.2.8,<5.3
+mtcnn==1.0.0
+keras-facenet==0.3.2
+scikit-learn==1.4.2
+numpy==1.26.4
+Pillow>=12.1,<13
+reportlab>=4.4,<5
+whitenoise>=6.12,<7
